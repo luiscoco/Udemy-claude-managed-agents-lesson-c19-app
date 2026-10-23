@@ -42,27 +42,74 @@ CLAUDE_MANAGED_ENVIRONMENT_ID=your_environment_id
 PORT=3019
 ```
 
-## How the application was developed
+## How the app was build
 
-The browser collects inputs; the Node host validates requests; the lesson implementation produces observable evidence. The architecture page walks through the real source with numbered steps, prerequisite configuration, source filenames and code excerpts.
+### 1. Bind the decision to the captured pending call
 
-### Lesson implementation
+The local pending call is sevt_write, and the only supported decisions are allow and deny. A different event ID or decision cannot produce a confirmation plan.
 
-[src/lesson.ts](https://github.com/luiscoco/Udemy-claude-managed-agents-lesson-c19-app/blob/main/src/lesson.ts)
+Source: [src/lesson.ts](src/lesson.ts#L13) · selected statements
 
 ```typescript
-  async run(input) {
+const id = text(input, "eventId"),
+  decision = text(input, "decision");
 
-const id=text(input,"eventId"), decision=text(input,"decision");
-if(id!=="sevt_write"||!["allow","deny"].includes(decision))return report("rejected","Decision does not match the captured pending call",{},["Inspect the canonical request","Verify event correlation and the selected decision"]);
-const acknowledged=flag(input,"deliveryAcknowledged");
-return report(acknowledged?"passed":"unconfirmed","Confirmation receipt is separate from tool execution",{state:acknowledged?"acknowledged":"uncertain",event:{type:"user.tool_confirmation",tool_use_id:id,result:decision},toolSuccess:"not observed"},["Claim the pending decision before sending","Use the captured event identifier","Do not blindly resend an uncertain confirmation"]);
-
-  }
-};
+if (id !== "sevt_write" || !["allow", "deny"].includes(decision))
+  return report(
+    "rejected",
+    "Decision does not match the captured pending call",
+    {},
+    [
+      "Inspect the canonical request",
+      "Verify event correlation and the selected decision",
+    ],
+  );
 ```
 
-Read the architecture page for the remaining source excerpts and explanations, including input handling and optional provider behavior. The diagram describes this application, rather than implying that an external integration has been implemented.
+### 2. Separate acknowledgement from execution
+
+The prepared user.tool_confirmation uses tool_use_id to correlate the original call. An unacknowledged delivery remains uncertain, and toolSuccess stays not observed even after acknowledgement; the reducer sends no confirmation.
+
+Source: [src/lesson.ts](src/lesson.ts#L15) · selected statements
+
+```typescript
+const acknowledged = flag(input, "deliveryAcknowledged");
+
+return report(
+  acknowledged ? "passed" : "unconfirmed",
+  "Confirmation receipt is separate from tool execution",
+  {
+    state: acknowledged ? "acknowledged" : "uncertain",
+    event: { type: "user.tool_confirmation", tool_use_id: id, result: decision },
+    toolSuccess: "not observed",
+  },
+  [
+    "Claim the pending decision before sending",
+    "Use the captured event identifier",
+    "Do not blindly resend an uncertain confirmation",
+  ],
+);
+```
+
+### Check your understanding
+
+Run **Approve the current call** in the application. Compare the result with these scenario expectations:
+
+```json
+{
+  "input": {
+    "eventId": "sevt_write",
+    "decision": "allow",
+    "deliveryAcknowledged": true
+  },
+  "expectedOutcome": "passed",
+  "checkEvidence": {
+    "state": "acknowledged"
+  }
+}
+```
+
+Then try **Reject wrong correlation**. Its expected outcome is `rejected`; identify the condition or evidence field that explains the difference.
 
 ## Validation
 
